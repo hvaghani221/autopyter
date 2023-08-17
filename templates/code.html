@@ -1,0 +1,25 @@
+{{ range .States -}}
+<section class="codesection">
+  <div class="code">{{ .Code }}</div>
+  <hr>
+  <div class="loader"
+    hx-get="/page/result/{{ .ID }}"
+    hx-swap="outerHTML"
+    hx-trigger="load"
+  ></div>
+  <div class="panel">
+    <button>Select</button>
+    <button
+      hx-delete="/page/code/{{ .ID }}"
+      hx-target="closest section"
+      hx-swap="outerHTML"
+    >Remove</button>
+  </div>
+</section>
+{{ end }}
+<div
+  hx-get="/page/code?start={{.LastID}}"
+  hx-trigger="codeExecuted from:body"
+  hx-swap="outerHTML"
+  hx-target="this"
+></div>

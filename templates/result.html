@@ -1,0 +1,20 @@
+
+{{ define "exception" }}
+<p>Error: {{ .EName }}</p>
+<p>Value: {{ .EValue }}</p>
+{{ end }}
+
+{{ define "result" }}
+{{ range $key, $value := .Data }}
+{{ gethtml $key $value}}
+{{ end }}
+{{ end }}
+
+<div class="result">
+  {{- if .Exception -}}
+  {{ template "exception" .Exception }}
+  {{- end -}}
+  {{- if .Result -}}
+  {{ template "result" .Result }}
+  {{- end -}}
+</div>

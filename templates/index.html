@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>{{ "Autopyter" }}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.4"></script>
+  <link rel="stylesheet" type="text/css" href="/static/styles.css" />
+</head>
+<body>
+  <script>
+    // htmx.logAll();
+    document.body.addEventListener("codeExecuted", function(evt){
+      console.log("Code executed: " + evt.detail);
+    })
+  </script>
+  <main hx-boost="true">
+    <div id="clipview" class="clipview"
+      hx-get="/page/clip"
+      hx-trigger="load"
+    ></div>
+    <div id="codeview" class="codeview"
+      hx-get="/page/code"
+      hx-trigger="load"
+    ></div>
+  </main>
+</body>
+</html>
