@@ -1,16 +1,16 @@
 package code
 
 import (
-	"bytes"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/hvaghani221/autopyter/internal/kernel"
 )
 
 type State struct {
-	PreviousCode   bytes.Buffer
+	PreviousState  []*ExecutionState
 	CurrentState   []*ExecutionState
 	mu             sync.RWMutex
 	preloadKernels *kernel.PreloadedKernels
@@ -19,13 +19,18 @@ type State struct {
 }
 
 type ExecutionState struct {
-	Code        string                   `json:"code"`
-	ID          int64                    `json:"id"`
-	Result      *kernel.ResultMessage    `json:"result,omitempty"`
-	Exception   *kernel.ExceptionMessage `json:"exception,omitempty"`
-	Error       error                    `json:"error,omitempty"`
-	Kernel      *kernel.Kernel           `json:"-"`
+	Code       string                    `json:"code"`
+	ID         int64                     `json:"id"`
+	Results    []kernel.ResultMessage    `json:"result,omitempty"`
+	Exceptions []kernel.ExceptionMessage `json:"exception,omitempty"`
+	Error      error                     `json:"error,omitempty"`
+	KernelID   string
+	// Kernel      *kernel.Kernel           `json:"-"`
 	waitChannel chan struct{}
+}
+
+func (es *ExecutionState) GetID() int64 {
+	return es.ID
 }
 
 func (es *ExecutionState) WaitForResult() bool {
@@ -34,42 +39,56 @@ func (es *ExecutionState) WaitForResult() bool {
 }
 
 func NewState() *State {
-	// k, err := kernel.CreateKernel()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
 	preloadedkernels, err := kernel.NewPreloaded()
 	if err != nil {
 		log.Fatal(err)
 	}
 	s := &State{
-		PreviousCode:   bytes.Buffer{},
+		PreviousState:  []*ExecutionState{},
 		CurrentState:   []*ExecutionState{},
 		mu:             sync.RWMutex{},
 		preloadKernels: preloadedkernels,
-		// kernel:         k,
 	}
 
 	return s
 }
 
-func (s *State) Select(id int) error {
+func (s *State) Select(id int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if id > len(s.CurrentState) {
-		return errors.New("state index out of range")
+	var executionState *ExecutionState
+
+	for _, state := range s.CurrentState {
+		if state.ID == id {
+			executionState = state
+			break
+		}
 	}
-	if _, err := s.PreviousCode.WriteString(s.CurrentState[id].Code); err != nil {
-		return err
+	if executionState == nil {
+		return errors.New("state not found")
 	}
+
+	s.PreviousState = append(s.PreviousState, executionState)
+
 	s.CurrentState = s.CurrentState[:0]
 
-	if err := s.preloadKernels.Reset(s.PreviousCode.String()); err != nil {
+	if err := s.preloadKernels.Reset(s.getPreviousCode()); err != nil {
 		return err
 	}
-
 	return nil
+}
+
+func (s *State) getPreviousCode() string {
+	if len(s.PreviousState) == 0 {
+		return ""
+	}
+	builder := strings.Builder{}
+	for _, state := range s.PreviousState {
+		builder.WriteString(state.Code)
+		builder.WriteString("\n")
+	}
+	return builder.String()
 }
 
 func (s *State) Execute(code string) error {
@@ -82,37 +101,47 @@ func (s *State) Execute(code string) error {
 		return err
 	}
 
-	log.Println("executing code on kernel", kernel.ID)
+	// log.Println("executing code on kernel", kernel.ID)
 
 	waitChan := make(chan struct{})
 	state := &ExecutionState{
-		Code:        code,
-		ID:          s.lastId,
-		Kernel:      kernel,
+		Code: code,
+		ID:   s.lastId,
+		// Kernel:      kernel,
 		waitChannel: waitChan,
+		KernelID:    kernel.ID,
 	}
 	s.lastId++
 	go func() {
 		res, exc, err := kernel.ExecuteCode(code)
-		state.Result = res
-		state.Exception = exc
+		state.Results = res
+		state.Exceptions = exc
 		state.Error = err
 		close(waitChan)
+		kernel.Close()
 	}()
 
 	s.CurrentState = append(s.CurrentState, state)
 	return nil
 }
 
-func (s *State) ListStates() []ExecutionState {
+func (s *State) ListStates(current bool) []*ExecutionState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	res := make([]ExecutionState, 0, len(s.CurrentState))
-	for _, state := range s.CurrentState {
-		res = append(res, ExecutionState{
-			Code: state.Code,
-			ID:   state.ID,
+	var list []*ExecutionState
+	if current {
+		list = s.CurrentState
+	} else {
+		list = s.PreviousState
+	}
+
+	res := make([]*ExecutionState, 0, len(list))
+	for _, state := range list {
+		res = append(res, &ExecutionState{
+			Code:     state.Code,
+			ID:       state.ID,
+			KernelID: state.KernelID,
 		})
 	}
 	return res
@@ -120,9 +149,6 @@ func (s *State) ListStates() []ExecutionState {
 
 func (s *State) Close() {
 	s.preloadKernels.Close()
-	for _, state := range s.CurrentState {
-		state.Kernel.Close()
-	}
 }
 
 func (s *State) GetState(id int64) *ExecutionState {
@@ -144,10 +170,44 @@ func (s *State) RemoveState(id int64) bool {
 	for i, state := range s.CurrentState {
 		if state.ID == id {
 			s.CurrentState = append(s.CurrentState[:i], s.CurrentState[i+1:]...)
-
-			state.Kernel.Close()
 			return true
 		}
 	}
 	return false
+}
+
+func (s *State) RemovePreviousState(id int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i, state := range s.PreviousState {
+		if state.ID == id {
+			s.PreviousState = append(s.PreviousState[:i], s.PreviousState[i+1:]...)
+			go func() {
+				if err := s.preloadKernels.Reset(s.getPreviousCode()); err != nil {
+					log.Println(err)
+				}
+			}()
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *State) ResetPreviousState() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.PreviousState) == 0 && len(s.CurrentState) == 0 {
+		return
+	}
+
+	s.PreviousState = s.PreviousState[:0]
+	s.CurrentState = s.CurrentState[:0]
+	go func() {
+		if err := s.preloadKernels.Reset(s.getPreviousCode()); err != nil {
+			log.Println(err)
+		}
+	}()
 }

@@ -1,20 +1,21 @@
-
-{{ define "exception" }}
-<p>Error: {{ .EName }}</p>
-<p>Value: {{ .EValue }}</p>
-{{ end }}
-
-{{ define "result" }}
+{{- define "result" -}}
 {{ range $key, $value := .Data }}
 {{ gethtml $key $value}}
 {{ end }}
-{{ end }}
+{{- end -}}
+
+{{- define "exception" -}}
+<p>Error: {{ .EName }}</p>
+<p>Value: {{ .EValue }}</p>
+<p>Traceback: <pre>{{ ashtml .Traceback  }}</pre></p>
+{{- end -}}
 
 <div class="result">
-  {{- if .Exception -}}
-  {{ template "exception" .Exception }}
+  <label>Output: </label>
+  {{ range .Exceptions }}
+  {{ template "exception" . }}
   {{- end -}}
-  {{- if .Result -}}
-  {{ template "result" .Result }}
+  {{- range .Results -}}
+  {{ template "result" . }}
   {{- end -}}
 </div>

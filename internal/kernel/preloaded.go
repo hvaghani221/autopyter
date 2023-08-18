@@ -1,6 +1,9 @@
 package kernel
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 type PreloadedKernels struct {
 	code    string
@@ -26,19 +29,42 @@ func (k *PreloadedKernels) Get() (*Kernel, error) {
 	kernel := k.kernels[len(k.kernels)-1]
 	k.kernels = k.kernels[:len(k.kernels)-1]
 
+	if len(k.kernels) == 0 {
+		go func() {
+			preloadedkernel, err := k.createPreloadedKernel()
+			if err != nil {
+				log.Println("Error creating preloaded kernel:", err)
+				return
+			}
+			k.mu.Lock()
+			defer k.mu.Unlock()
+			k.kernels = append(k.kernels, preloadedkernel)
+		}()
+	}
+
 	return kernel, nil
 }
 
 func (k *PreloadedKernels) Reset(code string) error {
 	k.mu.Lock()
-	defer k.mu.Unlock()
 	k.code = code
+	for _, kernel := range k.kernels {
+		go kernel.Close()
+	}
+	k.kernels = k.kernels[:0]
+	k.mu.Unlock()
+
 	for i := 0; i < 4; i++ {
-		preloadedkernel, err := k.createPreloadedKernel()
-		if err != nil {
-			return err
-		}
-		k.kernels = append(k.kernels, preloadedkernel)
+		go func() {
+			preloadedkernel, err := k.createPreloadedKernel()
+			if err != nil {
+				log.Println("Error creating preloaded kernel:", err)
+				return
+			}
+			k.mu.Lock()
+			defer k.mu.Unlock()
+			k.kernels = append(k.kernels, preloadedkernel)
+		}()
 	}
 	return nil
 }
@@ -48,7 +74,8 @@ func (k *PreloadedKernels) createPreloadedKernel() (*Kernel, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, _, err = preloadedkernel.ExecuteCode(k.code); err != nil {
+	if msg, exception, err := preloadedkernel.ExecuteCode(k.code); err != nil {
+		log.Println(msg, exception, err)
 		return nil, err
 	}
 	return preloadedkernel, nil

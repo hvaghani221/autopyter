@@ -5,39 +5,17 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
-
-	"github.com/gorilla/mux"
 )
 
 func (c *Code) CodeHandler(w http.ResponseWriter, r *http.Request) {
-	list := c.state.ListStates()
-	last := r.URL.Query().Get("start")
-	lastID := int64(-1)
-
-	if last != "" {
-		var err error
-		lastID, err = strconv.ParseInt(last, 10, 64)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		i := 0
-		for ; i < len(list); i++ {
-			if list[i].ID > lastID {
-				break
-			}
-		}
-		list = list[i:]
+	list, lastID, ok := filterList(w, r, c.state.ListStates(true))
+	if !ok {
+		return
 	}
 
-	if len(list) > 0 {
-		lastID = list[len(list)-1].ID
-	}
 	data := struct {
-		States []ExecutionState
+		States []*ExecutionState
 		LastID int64
 	}{
 		States: list,
@@ -51,37 +29,21 @@ func (c *Code) CodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Code) CodeDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	codeID, ok := mux.Vars(r)["ID"]
+	id, ok := parseID(w, r)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-
-	id, err := strconv.ParseInt(codeID, 10, 64)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if !c.state.RemoveState(id) {
+		log.Println("Could not remove state", id)
 		http.NotFound(w, r)
 		return
 	}
 }
 
 func (c *Code) ExecuteHandler(w http.ResponseWriter, r *http.Request) {
-	codeID, ok := mux.Vars(r)["ID"]
-
+	id, ok := parseID(w, r)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-
-	id, err := strconv.ParseInt(codeID, 10, 64)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -101,17 +63,8 @@ func (c *Code) ExecuteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Code) ResultHandler(w http.ResponseWriter, r *http.Request) {
-	codeID, ok := mux.Vars(r)["ID"]
-
+	id, ok := parseID(w, r)
 	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-
-	id, err := strconv.ParseInt(codeID, 10, 64)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -131,12 +84,15 @@ func (c *Code) ResultHandler(w http.ResponseWriter, r *http.Request) {
 	funcs := template.FuncMap{
 		"gethtml": func(mimetype string, value any) template.HTML {
 			if strings.HasPrefix(mimetype, "text/") {
-				return template.HTML(fmt.Sprintf("<p>%s</p>", value))
+				return template.HTML(fmt.Sprintf("<pre>%s</pre>", value))
 			}
 			if strings.HasPrefix(mimetype, "image/") {
 				return template.HTML(fmt.Sprintf(`<img src="data:%s;base64,%s" alt="Embedded Image">`, mimetype, value))
 			}
 			return template.HTML(fmt.Sprintf(`<p>Unknown mimetype: %s</p>\n<p>%s</p>`, template.HTMLEscapeString(mimetype), template.HTMLEscapeString(fmt.Sprint(value))))
+		},
+		"ashtml": func(input string) template.HTML {
+			return template.HTML(input)
 		},
 	}
 
@@ -144,4 +100,68 @@ func (c *Code) ResultHandler(w http.ResponseWriter, r *http.Request) {
 	if err := tmpl.ExecuteTemplate(w, "result.html", state); err != nil {
 		log.Println(err)
 	}
+}
+
+func (c *Code) StateHander(w http.ResponseWriter, r *http.Request) {
+	list, lastID, ok := filterList(w, r, c.state.ListStates(false))
+	if !ok {
+		return
+	}
+
+	data := struct {
+		States []*ExecutionState
+		LastID int64
+	}{
+		States: list,
+		LastID: lastID,
+	}
+
+	funcs := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+	}
+
+	if len(data.States) > 0 {
+		w.Header().Set("HX-Trigger", "stateUpdated")
+	}
+
+	tmpl := template.Must(template.New("state").Funcs(funcs).ParseFS(c.fs, "templates/state.html"))
+	if err := tmpl.ExecuteTemplate(w, "state.html", data); err != nil {
+		log.Println(err)
+	}
+}
+
+func (c *Code) StateDeleteHander(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+
+	if !c.state.RemovePreviousState(id) {
+		http.NotFound(w, r)
+		return
+	}
+}
+
+func (c *Code) StateResetHander(w http.ResponseWriter, r *http.Request) {
+	c.state.ResetPreviousState()
+	w.Header().Set("HX-Trigger", "stateReset")
+}
+
+func (c *Code) SelectHandler(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := c.state.Select(id); err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Trigger", "stateSelected")
+	// TODO: fix with custom events
+	w.Header().Set("HX-Refresh", "true")
 }

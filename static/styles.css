@@ -65,6 +65,26 @@ main {
   position: relative;
 }
 
+.currentstate {
+  border: 1px solid black;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  flex-direction: row;
+}
+
+.statesection {
+  position: relative;
+}
+
+.statesection pre {
+  min-height: 2rem;
+}
+
 .panel {
   position: absolute;
   top: 0;

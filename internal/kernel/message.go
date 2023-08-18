@@ -1,6 +1,11 @@
 package kernel
 
-import "time"
+import (
+	"strings"
+	"time"
+
+	"github.com/robert-nix/ansihtml"
+)
 
 type MessageType string
 
@@ -11,6 +16,7 @@ const (
 	ExecuteReply   MessageType = "execute_reply"
 	Stream         MessageType = "stream"
 	DisplayData    MessageType = "display_data"
+	Status         MessageType = "status"
 )
 
 type Message struct {
@@ -34,15 +40,17 @@ type Header struct {
 }
 
 type executeRequest struct {
-	code          string
-	messageId     string
-	resultChan    chan ResultMessage
-	exceptionChan chan ExceptionMessage
+	code      string
+	messageId string
+	result    []ResultMessage
+	exception []ExceptionMessage
+	doneChan  chan struct{}
 }
 
 type ExceptionMessage struct {
-	EName  string `json:"ename"`
-	EValue string `json:"evalue"`
+	EName     string `json:"ename"`
+	EValue    string `json:"evalue"`
+	Traceback string `json:"traceback"`
 }
 
 type ResultMessage struct {
@@ -57,9 +65,17 @@ type StreamMessage struct {
 }
 
 func parseErrorMessage(msg map[string]any) ExceptionMessage {
+	trace := msg["traceback"].([]any)
+	builder := strings.Builder{}
+	for _, t := range trace {
+		builder.Write(ansihtml.ConvertToHTML([]byte(t.(string))))
+		builder.WriteString("\n")
+	}
+
 	return ExceptionMessage{
-		EName:  msg["ename"].(string),
-		EValue: msg["evalue"].(string),
+		EName:     msg["ename"].(string),
+		EValue:    msg["evalue"].(string),
+		Traceback: builder.String(),
 	}
 }
 

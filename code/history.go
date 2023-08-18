@@ -15,6 +15,10 @@ type HistoryItem struct {
 	ID   int64
 }
 
+func (hi HistoryItem) GetID() int64 {
+	return hi.ID
+}
+
 func NewHistory() *History {
 	return &History{
 		Items: make([]HistoryItem, 0),

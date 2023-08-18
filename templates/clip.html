@@ -1,8 +1,7 @@
 <!-- HistoryItem -->
 {{ range .Items }}
 <section class="clipsection">
-    <pre data-simplebar>{{ .Code }}</pre>
-    <label>ID: {{ .ID }}</label>
+    <!-- <label>ID: {{ .ID }}</label> -->
     <div hx-target="closest section">
         <button
           hx-post="/page/execute/{{ .ID }}"
@@ -11,12 +10,13 @@
           hx-delete="/page/clip/{{ .ID }}"
         >Remove</button>
     </div>
+    <pre data-simplebar>{{ .Code }}</pre>
     <hr>
 </section>
 {{ end }}
 <div
   hx-get="/page/clip?start={{.LastID}}"
-  hx-trigger="load delay:1s"
+  hx-trigger="load delay:100ms"
   hx-swap="outerHTML"
   hx-target="this"
 ></div>

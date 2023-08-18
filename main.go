@@ -39,8 +39,16 @@ func main() {
 
 	r.Methods("GET").Path("/page/code").HandlerFunc(c.CodeHandler)
 	r.Methods("DELETE").Path("/page/code/{ID}").HandlerFunc(c.CodeDeleteHandler)
+
 	r.Methods("POST").Path("/page/execute/{ID}").HandlerFunc(c.ExecuteHandler)
+
 	r.Methods("GET").Path("/page/result/{ID}").HandlerFunc(c.ResultHandler)
+
+	r.Methods("GET").Path("/page/select/{ID}").HandlerFunc(c.SelectHandler)
+
+	r.Methods("GET").Path("/page/state").HandlerFunc(c.StateHander)
+	r.Methods("GET").Path("/page/reset").HandlerFunc(c.StateResetHander)
+	r.Methods("DELETE").Path("/page/state/{ID}").HandlerFunc(c.StateDeleteHander)
 
 	// Static files
 	// r.PathPrefix("/static/").Handler(http.FileServer(http.FS(staticFiles)))

@@ -8,12 +8,20 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+func init() {
+	// TODO: add this under debug flag
+	os.RemoveAll("logs/")
+	_ = os.MkdirAll("logs", 0o777)
+}
 
 var host, token string
 
@@ -23,12 +31,14 @@ func InitKernel(kernelHost, kernelToken string) {
 }
 
 type Kernel struct {
-	ID           string `json:"id"`
+	ID           string
 	closeChan    chan struct{}
-	codeRequests map[string]executeRequest
+	codeRequests map[string]*executeRequest
 	conn         *websocket.Conn
 	messageChan  chan Message
 	sessionId    string
+	file         *os.File
+	mu           sync.Mutex
 }
 
 func CreateKernel() (*Kernel, error) {
@@ -67,43 +77,45 @@ func CreateKernel() (*Kernel, error) {
 	if err := json.Unmarshal(respBytes, &kernel); err != nil {
 		return nil, err
 	}
+	kernel.file, err = os.Create("logs/" + kernel.ID + ".log")
+	if err != nil {
+		return nil, err
+	}
+
+	kernel.mu = sync.Mutex{}
 
 	kernel.sessionId = uuid.New().String()
-	kernel.codeRequests = make(map[string]executeRequest)
+	kernel.codeRequests = make(map[string]*executeRequest)
 
 	kernel.closeChan = make(chan struct{})
 	if err = kernel.listenToKernel(); err != nil {
 		return nil, err
 	}
-
 	go kernel.handleKernelMessages()
 	return &kernel, nil
 }
 
-func (k *Kernel) ExecuteCode(code string) (*ResultMessage, *ExceptionMessage, error) {
+func (k *Kernel) ExecuteCode(code string) ([]ResultMessage, []ExceptionMessage, error) {
 	if len(strings.TrimSpace(code)) == 0 {
-		return &ResultMessage{}, nil, nil
+		return []ResultMessage{}, nil, nil
 	}
 	req := executeRequest{
-		code:          code,
-		messageId:     uuid.New().String(),
-		resultChan:    make(chan ResultMessage, 1),
-		exceptionChan: make(chan ExceptionMessage, 1),
+		code:      code,
+		messageId: uuid.New().String(),
+		result:    make([]ResultMessage, 0, 1),
+		exception: make([]ExceptionMessage, 0, 1),
+		doneChan:  make(chan struct{}),
 	}
-	k.codeRequests[req.messageId] = req
-	defer func() {
-		delete(k.codeRequests, req.messageId)
-	}()
+	k.mu.Lock()
+	k.codeRequests[req.messageId] = &req
+	k.mu.Unlock()
 
 	if err := k.sendExecuteRequest(req); err != nil {
 		return nil, nil, err
 	}
-	select {
-	case result := <-req.resultChan:
-		return &result, nil, nil
-	case exception := <-req.exceptionChan:
-		return nil, &exception, nil
-	}
+	<-req.doneChan
+
+	return req.result, req.exception, nil
 }
 
 func (k *Kernel) listenToKernel() error {
@@ -132,15 +144,24 @@ func (k *Kernel) listenToKernel() error {
 		for {
 			select {
 			case <-k.closeChan:
-				client.Close()
 				return
 			default:
 				var op Message
 				err = client.ReadJSON(&op)
-				if err != nil {
-					log.Fatal(err)
+				fmt.Fprintf(k.file, "Message type: %s ParentHeader: %s\n", op.MsgType, op.ParentHeader)
+				content, _ := json.Marshal(op.Content)
+				fmt.Fprintf(k.file, "Content: %s\n", string(content))
+				fmt.Fprintf(k.file, "--------------------\n\n")
+				select {
+				case <-k.closeChan:
+					return
+				default:
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+					ch <- op
 				}
-				ch <- op
 			}
 		}
 	}()
@@ -149,10 +170,12 @@ func (k *Kernel) listenToKernel() error {
 
 func (k *Kernel) Close() {
 	log.Println("Closing kernel", k.ID)
-	close(k.closeChan)
+	defer k.conn.Close()
+	defer k.file.Close()
 	if err := k.deleteKernel(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
+	close(k.closeChan)
 }
 
 func (k *Kernel) handleKernelMessages() {
@@ -162,7 +185,9 @@ func (k *Kernel) handleKernelMessages() {
 		case <-k.closeChan:
 			return
 		case msg := <-k.messageChan:
+			k.mu.Lock()
 			request, ok := k.codeRequests[msg.ParentHeader.MsgID]
+			k.mu.Unlock()
 			if !ok {
 				continue
 			}
@@ -174,15 +199,27 @@ func (k *Kernel) handleKernelMessages() {
 				if stream != nil {
 					res.Stream = stream
 				}
-				request.resultChan <- res
+				stream = nil
+				k.mu.Lock()
+				request.result = append(request.result, res)
+				k.mu.Unlock()
 			case ExecuteReply:
 				res := ResultMessage{}
 				if stream != nil {
 					res.Stream = stream
 				}
-				request.resultChan <- res
+				stream = nil
+				k.mu.Lock()
+				request.result = append(request.result, res)
+				k.mu.Unlock()
 			case ExecuteError:
-				request.exceptionChan <- parseErrorMessage(msg.Content)
+				k.mu.Lock()
+				request.exception = append(request.exception, parseErrorMessage(msg.Content))
+				k.mu.Unlock()
+			case Status:
+				if msg.Content["execution_state"] == "idle" {
+					request.doneChan <- struct{}{}
+				}
 			}
 		}
 	}
@@ -224,7 +261,7 @@ func (k *Kernel) deleteKernel() error {
 		header.Add("Authorization", "token "+token)
 	}
 
-	kernelUrl := url.URL{Scheme: "http", Host: "localhost:8888", Path: "/api/kernels/" + k.ID}
+	kernelUrl := url.URL{Scheme: "http", Host: host, Path: "/api/kernels/" + k.ID}
 
 	req, err := http.NewRequest("DELETE", kernelUrl.String(), nil)
 	if err != nil {
