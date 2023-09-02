@@ -195,15 +195,14 @@ func (s *State) RemovePreviousState(id int64) bool {
 	return false
 }
 
-func (s *State) ResetPreviousState() {
+func (s *State) ResetState(currentOnly bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.PreviousState) == 0 && len(s.CurrentState) == 0 {
-		return
+	if !currentOnly {
+		s.PreviousState = s.PreviousState[:0]
 	}
 
-	s.PreviousState = s.PreviousState[:0]
 	s.CurrentState = s.CurrentState[:0]
 	go func() {
 		if err := s.preloadKernels.Reset(s.getPreviousCode()); err != nil {

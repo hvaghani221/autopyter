@@ -1,0 +1,7 @@
+FROM jupyter/base-notebook:python-3.8.8
+
+USER root
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
+
+USER jovyan
+# docker buildx build --platform linux/amd64,linux/arm64/v8 -t hvaghani221/jupyter-base:1.0.0 -f Dockerfile.base .

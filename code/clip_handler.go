@@ -24,9 +24,11 @@ func (c *Code) ClipHandler(w http.ResponseWriter, req *http.Request) {
 	data := struct {
 		Items  []HistoryItem
 		LastID int64
+		Debug  bool
 	}{
 		Items:  list,
 		LastID: lastID,
+		Debug:  c.debug,
 	}
 
 	if err := tmpl.ExecuteTemplate(w, "clip.html", data); err != nil {

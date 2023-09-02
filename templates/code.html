@@ -1,9 +1,9 @@
-{{ range .States -}}
+{{- $debug := .Debug -}}
+{{- range .States -}}
 <section class="codesection">
   <div class="code">{{ .Code }}</div>
   <hr>
-  <p>{{ .KernelID }}</p>
-  <hr>
+  {{ if $debug }}<p>Kernel ID: {{ .KernelID }}</p><hr>{{ end }}
   <div class="loader"
     hx-get="/page/result/{{ .ID }}"
     hx-swap="outerHTML"
@@ -19,7 +19,7 @@
     >Remove</button>
   </div>
 </section>
-{{ end }}
+{{- end }}
 <div
   hx-get="/page/code?start={{.LastID}}"
   hx-trigger="load delay:1s,codeExecuted from:body"

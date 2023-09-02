@@ -5,4 +5,3 @@ enhancements:
 - Add loading indicator when clicked on execute
 - Make codes editable
 - Add Execute all and remove all button in clipview
-- Add text area to write and execute code within the UI

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -15,23 +16,24 @@ import (
 	"github.com/hvaghani221/autopyter/internal/kernel"
 )
 
-//goo:embed static
-// var staticFiles embed.FS
+//go:embed static
+var staticFiles embed.FS
 
-//goo:embed templates
-// var templateFs embed.FS
+//go:embed templates
+var templateFs embed.FS
 
 func main() {
-	address := flag.String("address", ":8080", "Address to listen on")
-	kernelAddr := flag.String("kernelhost", "localhost:8888", "kernel host address")
+	address := flag.String("address", "127.0.0.1:8080", "Address to listen on")
+	kernelAddr := flag.String("kernelhost", "127.0.0.1:8888", "kernel host address")
 	token := flag.String("token", "ab17a9eb56a95a0bb5af1befa3772368339592c3192da431", "API token")
+	debug := flag.Bool("debug", false, "Debug mode")
 
 	flag.Parse()
-	kernel.InitKernel(*kernelAddr, *token)
+	kernel.InitKernel(*kernelAddr, *token, *debug)
 
 	r := mux.NewRouter()
 
-	c := code.NewCode(os.DirFS("."))
+	c := code.NewCode(templateFs, *debug)
 	defer c.Close()
 	r.HandleFunc("/", c.PageHandler)
 	r.Methods("GET").Path("/page/clip").HandlerFunc(c.ClipHandler)
@@ -50,14 +52,16 @@ func main() {
 	r.Methods("GET").Path("/page/reset").HandlerFunc(c.StateResetHander)
 	r.Methods("DELETE").Path("/page/state/{ID}").HandlerFunc(c.StateDeleteHander)
 
+	r.Methods("GET").Path("/page/editor").HandlerFunc(c.EditorHandler)
+	r.Methods("POST").Path("/page/editor/execute").HandlerFunc(c.EditorExecuteHandler)
+
 	// Static files
-	// r.PathPrefix("/static/").Handler(http.FileServer(http.FS(staticFiles)))
-	r.PathPrefix("/static/").Handler(http.FileServer(http.FS(os.DirFS("."))))
+	r.PathPrefix("/static/").Handler(http.FileServer(http.FS(staticFiles)))
 
 	errchan := make(chan error)
 	go func() { errchan <- http.ListenAndServe(*address, r) }()
 
-	url := "http://localhost" + *address
+	url := "http://" + *address
 	fmt.Println("Open URL: " + url)
 
 	shutdownChan := make(chan os.Signal, 2)

@@ -17,17 +17,20 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func init() {
-	// TODO: add this under debug flag
-	os.RemoveAll("logs/")
-	_ = os.MkdirAll("logs", 0o777)
-}
+var (
+	host, token string
+	debug       bool
+)
 
-var host, token string
-
-func InitKernel(kernelHost, kernelToken string) {
+func InitKernel(kernelHost, kernelToken string, debugFlag bool) {
 	host = kernelHost
 	token = kernelToken
+	debug = debugFlag
+
+	if debug {
+		_ = os.RemoveAll("logs/")
+		_ = os.MkdirAll("logs", 0o777)
+	}
 }
 
 type Kernel struct {
@@ -77,9 +80,12 @@ func CreateKernel() (*Kernel, error) {
 	if err := json.Unmarshal(respBytes, &kernel); err != nil {
 		return nil, err
 	}
-	kernel.file, err = os.Create("logs/" + kernel.ID + ".log")
-	if err != nil {
-		return nil, err
+
+	if debug {
+		kernel.file, err = os.Create("logs/" + kernel.ID + ".log")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	kernel.mu = sync.Mutex{}
@@ -148,10 +154,10 @@ func (k *Kernel) listenToKernel() error {
 			default:
 				var op Message
 				err = client.ReadJSON(&op)
-				fmt.Fprintf(k.file, "Message type: %s ParentHeader: %s\n", op.MsgType, op.ParentHeader)
+				k.log("Message type: %s ParentHeader: %s\n", op.MsgType, op.ParentHeader)
 				content, _ := json.Marshal(op.Content)
-				fmt.Fprintf(k.file, "Content: %s\n", string(content))
-				fmt.Fprintf(k.file, "--------------------\n\n")
+				k.log("Content: %s\n", string(content))
+				k.log("--------------------\n\n")
 				select {
 				case <-k.closeChan:
 					return
@@ -169,9 +175,10 @@ func (k *Kernel) listenToKernel() error {
 }
 
 func (k *Kernel) Close() {
-	log.Println("Closing kernel", k.ID)
 	defer k.conn.Close()
-	defer k.file.Close()
+	if debug {
+		defer k.file.Close()
+	}
 	if err := k.deleteKernel(); err != nil {
 		log.Println(err)
 	}
@@ -276,4 +283,10 @@ func (k *Kernel) deleteKernel() error {
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (k *Kernel) log(format string, a ...any) {
+	if debug {
+		fmt.Fprintf(k.file, format, a...)
+	}
 }

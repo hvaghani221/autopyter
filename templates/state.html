@@ -2,15 +2,12 @@
 {{ range $i, $state := .States }}
 <section class="statesection">
     <pre>{{ $state.Code }}</pre>
-    {{ if eq $i  $lastIndex }}
     <div class="panel removestate">
       <button
         hx-delete="/page/state/{{ $state.ID }}"
         hx-target="closest section"
-        _="on click call unhideLastResetButton()"
       >Remove</button>
     </div>
-    {{ end }}
     <hr>
 </section>
 {{ end }}

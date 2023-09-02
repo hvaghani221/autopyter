@@ -1,17 +1,18 @@
-<!-- HistoryItem -->
+{{ $debug := .Debug }}
 {{ range .Items }}
 <section class="clipsection">
-    <!-- <label>ID: {{ .ID }}</label> -->
     <div hx-target="closest section">
         <button
           hx-post="/page/execute/{{ .ID }}"
-        >Execute</button>
+          hx-indicator="#loader-{{ .ID }}"
+          >Execute<div class="htmx-indicator" id="loader-{{ .ID }}"/><div class="loader" /></button>
         <button
           hx-delete="/page/clip/{{ .ID }}"
         >Remove</button>
     </div>
     <pre data-simplebar>{{ .Code }}</pre>
     <hr>
+    {{ if $debug }}<label>ID: {{ .ID }}</label><hr>{{ end }}
 </section>
 {{ end }}
 <div

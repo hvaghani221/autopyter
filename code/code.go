@@ -13,9 +13,10 @@ type Code struct {
 	history    *History
 	state      *State
 	fs         fs.FS
+	debug      bool
 }
 
-func NewCode(fs fs.FS) *Code {
+func NewCode(fs fs.FS, debug ...bool) *Code {
 	clipStream, cancleFunc := clip.NewStream(time.Millisecond * 100)
 	code := &Code{
 		clipStream: clipStream,
@@ -24,6 +25,11 @@ func NewCode(fs fs.FS) *Code {
 		fs:         fs,
 		state:      NewState(),
 	}
+
+	if len(debug) > 0 {
+		code.debug = debug[0]
+	}
+
 	go code.listenStream()
 	return code
 }

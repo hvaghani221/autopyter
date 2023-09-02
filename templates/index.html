@@ -16,15 +16,8 @@
         elements[elements.length-2].style.display = "block";;
       }
     }
-    // htmx.logAll();
-    document.body.addEventListener("codeExecuted", function(evt){
-      console.log("Code executed: " + evt.detail);
-    })
-    document.body.addEventListener("stateUpdated", function(evt){
-      console.log("State updated: " + evt.detail);
-    })
   </script>
-  <main hx-boost="true">
+  <main>
     <div id="clipview" class="clipview"
       hx-get="/page/clip"
       hx-trigger="load"
@@ -49,6 +42,11 @@
         hx-get="/page/code"
         hx-trigger="load"
       ></div>
+      <hr>
+      <div
+        hx-get="/page/editor"
+        hx-trigger="load"
+      />
     </div>
   </main>
 </body>

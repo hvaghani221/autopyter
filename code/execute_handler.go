@@ -17,9 +17,11 @@ func (c *Code) CodeHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		States []*ExecutionState
 		LastID int64
+		Debug  bool
 	}{
 		States: list,
 		LastID: lastID,
+		Debug:  c.debug,
 	}
 
 	tmpl := template.Must(template.New("code").ParseFS(c.fs, "templates/code.html"))
@@ -142,11 +144,16 @@ func (c *Code) StateDeleteHander(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+
+	c.state.ResetState(true)
+	w.Header().Set("HX-Trigger", "stateReset")
+	w.Header().Set("HX-Refresh", "true")
 }
 
 func (c *Code) StateResetHander(w http.ResponseWriter, r *http.Request) {
-	c.state.ResetPreviousState()
+	c.state.ResetState(false)
 	w.Header().Set("HX-Trigger", "stateReset")
+	w.Header().Set("HX-Refresh", "true")
 }
 
 func (c *Code) SelectHandler(w http.ResponseWriter, r *http.Request) {
@@ -164,4 +171,31 @@ func (c *Code) SelectHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Trigger", "stateSelected")
 	// TODO: fix with custom events
 	w.Header().Set("HX-Refresh", "true")
+}
+
+func (c *Code) EditorHandler(w http.ResponseWriter, r *http.Request) {
+	tmpl := template.Must(template.New("editor").ParseFS(c.fs, "templates/editor.html"))
+	if err := tmpl.ExecuteTemplate(w, "editor.html", nil); err != nil {
+		log.Println(err)
+	}
+}
+
+func (c *Code) EditorExecuteHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		log.Println("Error parsing editor execute request form", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	code := r.Form.Get("code")
+	if err := c.state.Execute(code); err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("HX-Trigger", "codeExecuted")
+	tmpl := template.Must(template.New("editor").ParseFS(c.fs, "templates/editor.html"))
+	if err := tmpl.ExecuteTemplate(w, "editor.html", nil); err != nil {
+		log.Println(err)
+	}
 }
