@@ -2,6 +2,11 @@
 {{ range $key, $value := .Data }}
 {{ gethtml $key $value}}
 {{ end }}
+{{ if ne .Stream nil }}
+<hr>
+<div>{{ .Stream.Name }}: <pre>{{ .Stream.Text }}</pre></div>
+<hr>
+{{ end }}
 {{- end -}}
 
 {{- define "exception" -}}

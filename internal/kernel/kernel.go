@@ -186,7 +186,6 @@ func (k *Kernel) Close() {
 }
 
 func (k *Kernel) handleKernelMessages() {
-	var stream *StreamMessage
 	for {
 		select {
 		case <-k.closeChan:
@@ -200,22 +199,15 @@ func (k *Kernel) handleKernelMessages() {
 			}
 			switch msg.MsgType {
 			case Stream:
-				stream = parseStreamMessage(msg.Content)
-			case ExecuteResult, DisplayData:
-				res := parseResultMessage(msg.Content)
-				if stream != nil {
-					res.Stream = stream
+				stream := parseStreamMessage(msg.Content)
+				res := ResultMessage{
+					Stream: stream,
 				}
-				stream = nil
 				k.mu.Lock()
 				request.result = append(request.result, res)
 				k.mu.Unlock()
-			case ExecuteReply:
-				res := ResultMessage{}
-				if stream != nil {
-					res.Stream = stream
-				}
-				stream = nil
+			case ExecuteResult, DisplayData:
+				res := parseResultMessage(msg.Content)
 				k.mu.Lock()
 				request.result = append(request.result, res)
 				k.mu.Unlock()
