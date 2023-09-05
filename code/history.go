@@ -76,7 +76,7 @@ func (h *History) List() []HistoryItem {
 func (h *History) Clear() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.Items = make([]HistoryItem, 0)
+	h.Items = h.Items[:0]
 }
 
 func (h *History) Len() int {

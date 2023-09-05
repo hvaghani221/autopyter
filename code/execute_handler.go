@@ -152,6 +152,7 @@ func (c *Code) StateDeleteHander(w http.ResponseWriter, r *http.Request) {
 
 func (c *Code) StateResetHander(w http.ResponseWriter, r *http.Request) {
 	c.state.ResetState(false)
+	c.history.Clear()
 	w.Header().Set("HX-Trigger", "stateReset")
 	w.Header().Set("HX-Refresh", "true")
 }
