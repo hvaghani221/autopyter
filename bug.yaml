@@ -1,5 +1,9 @@
 Knowns:
 - reset button not working in some cases
+- When selected code throws exception, the next selected code doesn't get executed
+- Combine all the stdout and stderr
+- When output is large, it doesn't fit the view
+- \'os.system\' calls stdout/stderr is not captured
 
 enhancements:
 - Make codes editable

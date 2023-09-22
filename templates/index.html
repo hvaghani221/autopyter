@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <title>{{ "Autopyter" }}</title>
@@ -7,47 +8,34 @@
   <script src="https://unpkg.com/hyperscript.org@0.9.11"></script>
   <link rel="stylesheet" type="text/css" href="/static/styles.css" />
 </head>
+
 <body>
   <script>
-    function unhideLastResetButton(){
+    function unhideLastResetButton() {
       var elements = document.querySelectorAll(".removestate")
       if (elements.length > 1) {
         console.log("Unhiding last reset button");
-        elements[elements.length-2].style.display = "block";;
+        elements[elements.length - 2].style.display = "block";;
       }
     }
   </script>
   <main>
-    <div id="clipview" class="clipview"
-      hx-get="/page/clip"
-      hx-trigger="load"
-    ></div>
+    <div id="clipview" class="clipview" hx-get="/page/clip" hx-trigger="load"></div>
     <div id="codeview" class="codeview">
       <div class="currentstate">
         <div class="header">
           <h2>Previous States</h2>
-          <button
-            hx-get="/page/reset"
-            hx-swap="none"
-          >Reset</button>
+          <button hx-get="/page/reset" hx-swap="none">Reset</button>
         </div>
         <hr>
-        <div
-          hx-get="/page/state"
-          hx-trigger="load,stateReset from:body"
-        ></div>
+        <div hx-get="/page/state" hx-trigger="load,stateReset from:body"></div>
       </div>
       <h2>Current States</h2>
-      <div class="previousstate"
-        hx-get="/page/code"
-        hx-trigger="load"
-      ></div>
+      <div class="previousstate" hx-get="/page/code" hx-trigger="load"></div>
       <hr>
-      <div
-        hx-get="/page/editor"
-        hx-trigger="load"
-      />
+      <div hx-get="/page/editor" hx-trigger="load" />
     </div>
   </main>
 </body>
+
 </html>
